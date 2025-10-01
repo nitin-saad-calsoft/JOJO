@@ -121,7 +121,6 @@ export default function MovieCreationScreen({ navigation, route }: any) {
   const [unassignTrigger, setUnassignTrigger] = useState<{ characterId: string } | null>(null);
   const [assignChunkToCharacter, setAssignChunkToCharacter] = useState<{ chunkId: string, characterId: string | null, ts: number } | null>(null);
 
-const waveRef = useRef<IWaveformRef>(null);
   const [keyframes, setKeyframes] = useState<Keyframe[]>([
     {
       id: 'keyframe_0',
@@ -821,7 +820,13 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
             <>
               <TouchableOpacity 
                 style={styles.propertiesButton}
-                onPress={() => setShowPropertiesModal(true)}
+                onPress={() => {
+                  if (!selectedChar) {
+                    Alert.alert("No character selected", "Please add/select a character first.");
+                  } else {
+                    setShowPropertiesModal(true);
+                  }
+                }}
               >
                 <Icon name="settings" size={16} color="#FFFFFF" />
                 <Text style={styles.quickButtonText}>Props</Text>
@@ -891,7 +896,6 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
         assignChunkToCharacter={assignChunkToCharacter}
         />
       </View>
-
       {/* Character Properties Modal */}
       <Modal
         visible={showPropertiesModal}
@@ -900,7 +904,7 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
         onRequestClose={() => setShowPropertiesModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.propertiesModalContent}>
+          <View style={styles.propertiesModalContentFixed}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Character Properties</Text>
               <TouchableOpacity 
@@ -912,75 +916,75 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
             </View>
             
             {selectedChar && (
-              <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-              <View style={styles.propertiesContent}>
-                <Text style={styles.propertyTitle}>{selectedChar.name}</Text>
-                
-                <View style={styles.propertySection}>
-                  <Text style={styles.sectionTitle}>Position & Transform</Text>
-                  <Text style={styles.propertyText}>X: {Math.round(selectedChar.x)}, Y: {Math.round(selectedChar.y)}</Text>
-                  <Text style={styles.propertyText}>Scale: {selectedChar.scale.toFixed(1)}x</Text>
-                  <Text style={styles.propertyText}>Rotation: {selectedChar.rotation}°</Text>
-                </View>
-                
-                <View style={styles.propertySection}>
-                  <Text style={styles.sectionTitle}>Animation</Text>
-                  <View style={styles.animationGrid}>
-                    {animationActions
-                      // .filter(action => 
-                      //   !selectedChar.isRive || 
-                      //   !selectedChar.animations || 
-                      //   selectedChar.animations.includes(action.id)
-                      // )
-                      .map((action) => (
-                      <TouchableOpacity
-                        key={action.id}
-                        style={[
-                          styles.animationGridButton,
-                          selectedChar.animation === action.id && styles.activeAnimationGridButton
-                        ]}
-                        onPress={() => setCharacterAnimation(action.id as any)}
-                      >
-                        <Text style={styles.animationGridIcon}>{action.icon}</Text>
-                        <Text style={[
-                          styles.animationGridLabel,
-                          selectedChar.animation === action.id && styles.activeAnimationGridLabel
-                        ]}>
-                          {action.name}
-                        </Text>
+              <ScrollView contentContainerStyle={styles.propertiesScrollContent}>
+                <View style={styles.propertiesContent}>
+                  <Text style={styles.propertyTitle}>{selectedChar.name}</Text>
+                  
+                  <View style={styles.propertySection}>
+                    <Text style={styles.sectionTitle}>Position & Transform</Text>
+                    <Text style={styles.propertyText}>X: {Math.round(selectedChar.x)}, Y: {Math.round(selectedChar.y)}</Text>
+                    <Text style={styles.propertyText}>Scale: {selectedChar.scale.toFixed(1)}x</Text>
+                    <Text style={styles.propertyText}>Rotation: {selectedChar.rotation}°</Text>
+                  </View>
+                  
+                  <View style={styles.propertySection}>
+                    <Text style={styles.sectionTitle}>Animation</Text>
+                    <View style={styles.animationGrid}>
+                      {animationActions
+                        // .filter(action => 
+                        //   !selectedChar.isRive || 
+                        //   !selectedChar.animations || 
+                        //   selectedChar.animations.includes(action.id)
+                        // )
+                        .map((action) => (
+                        <TouchableOpacity
+                          key={action.id}
+                          style={[
+                            styles.animationGridButton,
+                            selectedChar.animation === action.id && styles.activeAnimationGridButton
+                          ]}
+                          onPress={() => setCharacterAnimation(action.id as any)}
+                        >
+                          <Text style={styles.animationGridIcon}>{action.icon}</Text>
+                          <Text style={[
+                            styles.animationGridLabel,
+                            selectedChar.animation === action.id && styles.activeAnimationGridLabel
+                          ]}>
+                            {action.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  
+                  <View style={styles.propertySection}>
+                    <Text style={styles.sectionTitle}>Controls</Text>
+                    <View style={styles.controlGrid}>
+                      <TouchableOpacity style={styles.controlGridButton} onPress={rotateCharacter}>
+                        <Icon name="rotate-right" size={20} color="#FFFFFF" />
+                        <Text style={styles.controlGridText}>Rotate</Text>
                       </TouchableOpacity>
-                    ))}
+                      
+                      <TouchableOpacity style={styles.controlGridButton} onPress={() => scaleCharacter(true)}>
+                        <Icon name="add" size={20} color="#FFFFFF" />
+                        <Text style={styles.controlGridText}>Scale +</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity style={styles.controlGridButton} onPress={() => scaleCharacter(false)}>
+                        <Icon name="remove" size={20} color="#FFFFFF" />
+                        <Text style={styles.controlGridText}>Scale -</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={[styles.controlGridButton, styles.deleteGridButton]} 
+                        onPress={deleteCharacter}
+                      >
+                        <Icon name="delete" size={20} color="#FFFFFF" />
+                        <Text style={styles.controlGridText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-                
-                <View style={styles.propertySection}>
-                  <Text style={styles.sectionTitle}>Controls</Text>
-                  <View style={styles.controlGrid}>
-                    <TouchableOpacity style={styles.controlGridButton} onPress={rotateCharacter}>
-                      <Icon name="rotate-right" size={20} color="#FFFFFF" />
-                      <Text style={styles.controlGridText}>Rotate</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity style={styles.controlGridButton} onPress={() => scaleCharacter(true)}>
-                      <Icon name="add" size={20} color="#FFFFFF" />
-                      <Text style={styles.controlGridText}>Scale +</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity style={styles.controlGridButton} onPress={() => scaleCharacter(false)}>
-                      <Icon name="remove" size={20} color="#FFFFFF" />
-                      <Text style={styles.controlGridText}>Scale -</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.controlGridButton, styles.deleteGridButton]} 
-                      onPress={deleteCharacter}
-                    >
-                      <Icon name="delete" size={20} color="#FFFFFF" />
-                      <Text style={styles.controlGridText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
               </ScrollView>
             )}
           </View>
@@ -1116,7 +1120,7 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Character</Text>
+              <Text style={styles.modalTitle}>Add Character jjjj</Text>
               <TouchableOpacity 
                 style={styles.modalCloseButton}
                 onPress={() => setShowCharacterModal(false)}
@@ -1359,6 +1363,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  propertiesModalContentFixed: {
+    width: '95%',
+    maxHeight: '80%',
+    backgroundColor: '#FFF',
+    borderRadius: 18,
+    padding: 24,
+    elevation: 12,
+    alignSelf: 'center',
+    justifyContent: 'flex-start',
+  },
+  propertiesScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
   },
   propertiesModalContent: {
     width: '92%',
