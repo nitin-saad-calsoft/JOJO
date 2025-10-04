@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import Rive, { RiveRef } from 'rive-react-native';
 
 interface RiveCharacterProps {
-  riveFile: string;
+  url: string;
   animationName?: string;
   stateMachineName?: string;
   width: number;
@@ -17,7 +17,7 @@ interface RiveCharacterProps {
 }
 
 export default function RiveCharacter({
-  riveFile,
+  url,
   animationName="walk",
   stateMachineName,
   width,
@@ -79,7 +79,7 @@ export default function RiveCharacter({
     ]}>
       <Rive
         ref={riveRef}
-        resourceName={riveFile}
+        url={url}
         animationName={animationName}
         autoplay={true}
         stateMachineName={stateMachineName}

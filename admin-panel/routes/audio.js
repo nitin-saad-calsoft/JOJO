@@ -2,10 +2,12 @@ const express = require('express');
 const Audio = require('../models/Audio');
 const { auth, adminAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const path = require('path');
+const mm = require('music-metadata'); // Add this package for duration extraction
 
 const router = express.Router();
 
-// Get all audio files
+// Get all audio files (now includes duration in response)
 router.get('/', auth, async (req, res) => {
   try {
     const { page = 1, limit = 10, category, search } = req.query;
@@ -24,8 +26,24 @@ router.get('/', auth, async (req, res) => {
 
     const total = await Audio.countDocuments(query);
 
+    // Format duration as mm:ss for each audio file
+    const audioWithDuration = audio.map(a => {
+      let durationStr = '0:00';
+      if (a.duration && typeof a.duration === 'number') {
+        const minutes = Math.floor(a.duration / 60);
+        const seconds = Math.floor(a.duration % 60);
+        durationStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      } else if (typeof a.duration === 'string') {
+        durationStr = a.duration;
+      }
+      return {
+        ...a.toObject(),
+        duration: durationStr,
+      };
+    });
+
     res.json({
-      audio,
+      audio: audioWithDuration,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       total
@@ -51,7 +69,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// Upload audio file
+// Upload audio file (ensure duration is stored as a string in DB)
 router.post('/', adminAuth, upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
@@ -60,11 +78,26 @@ router.post('/', adminAuth, upload.single('audio'), async (req, res) => {
 
     const { name, category, tags, description } = req.body;
 
+    // Get duration using music-metadata
+    let durationSeconds = 0;
+    let durationStr = '0:00';
+    try {
+      const mm = require('music-metadata');
+      const path = require('path');
+      const metadata = await mm.parseFile(path.join(req.file.destination, req.file.filename));
+      durationSeconds = Math.round(metadata.format.duration || 0);
+      durationStr = durationSeconds
+        ? `${Math.floor(durationSeconds / 60)}:${(durationSeconds % 60).toString().padStart(2, '0')}`
+        : '0:00';
+    } catch (err) {
+      durationStr = '0:00';
+    }
+
     const audio = new Audio({
       name: name || req.file.originalname,
       filename: req.file.filename,
       originalName: req.file.originalname,
-      duration: 0, // You might want to use a library to get actual duration
+      duration: durationStr, // <-- Store as string, not number
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
       category: category || 'background',

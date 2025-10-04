@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -20,86 +21,69 @@ interface Character {
   isRive?: boolean;
   riveFile?: string;
   animations?: string[];
+  category?: string;
 }
 
-const characterList: Character[] = [
-  { 
-    id: '1', 
-    name: 'Hero Knight', 
-    type: 'Fantasy', 
-    preview: 'https://images.pexels.com/photos/1670977/pexels-photo-1670977.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Brave warrior character',
-    isRive: true,
-    riveFile: 'fifth.riv',
-    animations: ['idle', 'walk', 'run', 'attack', 'jump']
-  },
-  { 
-    id: '2', 
-    name: 'six rive', 
-    type: 'Fantasy', 
-    preview: 'https://images.pexels.com/photos/1670977/pexels-photo-1670977.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Magical spellcaster',
-    isRive: true,
-    riveFile: 'six.riv',
-    animations: ['idle', 'cast_spell', 'walk', 'teleport']
-  },
-  { 
-    id: '3', 
-    name: 'Robot Assistant', 
-    type: 'Sci-Fi', 
-    preview: 'https://images.pexels.com/photos/2085831/pexels-photo-2085831.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Helpful android companion',
-    isRive: true,
-    riveFile: 'fifth.riv',
-    animations: ['idle', 'walk', 'work', 'dance', 'malfunction']
-  },
-  { 
-    id: '4', 
-    name: 'Princess Luna', 
-    type: 'Fantasy', 
-    preview: 'https://images.pexels.com/photos/1670977/pexels-photo-1670977.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Royal character',
-    isRive: false
-  },
-  { 
-    id: '5', 
-    name: 'Space Explorer', 
-    type: 'Sci-Fi', 
-    preview: 'https://images.pexels.com/photos/2085831/pexels-photo-2085831.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Astronaut adventurer',
-    isRive: false
-  },
-  { 
-    id: '6', 
-    name: 'Forest Elf', 
-    type: 'Fantasy', 
-    preview: 'https://images.pexels.com/photos/1670977/pexels-photo-1670977.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Nature guardian',
-    isRive: false
-  },
-  { 
-    id: '7', 
-    name: 'Cyber Ninja', 
-    type: 'Sci-Fi', 
-    preview: 'https://images.pexels.com/photos/2085831/pexels-photo-2085831.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Stealthy warrior',
-    isRive: false
-  },
-  { 
-    id: '8', 
-    name: 'Dragon Pet', 
-    type: 'Fantasy', 
-    preview: 'https://images.pexels.com/photos/1670977/pexels-photo-1670977.jpeg?auto=compress&cs=tinysrgb&w=400', 
-    description: 'Friendly dragon companion',
-    isRive: false
-  },
-];
-
-export default function CharacterSelectionScreen({ navigation }: any) {
+export default function CharacterSelectionScreen({ navigation, route }: any) {
   const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch characters from API
+  const fetchCharacters = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('http://10.0.2.2:5000/api/characters');
+      const data = await response.json();
+      console.log('API Characters loaded:', data);
+      
+      // Transform API characters to match our interface
+      // Update the preview URL logic to support SVG and JPEG images
+      const transformedCharacters = (data.characters || []).map((char: any) => {
+        let previewUrl = 'https://images.pexels.com/photos/163036/mario-luigi-yoschi-figures-163036.jpeg?auto=compress&cs=tinysrgb&w=400';
+        if (char.previewImage?.filename) {
+          // Support SVG and JPEG images
+          const mimeType = char.previewImage?.mimeType || '';
+          if (mimeType === 'image/svg+xml') {
+            previewUrl = `http://10.0.2.2:5000/uploads/characters/${char.previewImage.filename}`;
+          } else if (mimeType === 'image/jpeg' || mimeType === 'image/png') {
+            previewUrl = `http://10.0.2.2:5000/uploads/characters/${char.previewImage.filename}`;
+          }
+        }
+
+        return {
+          id: char._id,
+          name: char.name,
+          type: char.category || 'Unknown',
+          preview: previewUrl,
+          description: char.description || 'No description available',
+          isRive: char.type === 'rive',
+          riveFile: char.riveFile?.filename?.replace('.riv', '') || null,
+          animations: char.animations?.map((a: any) => a.name) || ['idle', 'walk', 'talk'],
+          category: char.category,
+        };
+      });
+
+      setCharacters(transformedCharacters);
+    } catch (error) {
+      console.error('Failed to load characters from API:', error);
+      setError('Failed to load characters from server');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  console.log("*(*(*(*(*", characters)
+
+  useEffect(() => {
+    fetchCharacters();
+  }, []);
 
   // Get selected background from navigation params
   const selectedBackground = navigation.getState()?.routes?.find(r => r.name === 'Characters')?.params?.selectedBackground;
+
   const handleCharacterToggle = (characterId: string) => {
     setSelectedCharacters(prev => {
       if (prev.includes(characterId)) {
@@ -117,15 +101,101 @@ export default function CharacterSelectionScreen({ navigation }: any) {
     }
     
     console.log('=== CHARACTER SELECTION CONTINUE ===');
-    console.log('Selected characters:', selectedCharacters);
+    console.log('Selected character IDs:', selectedCharacters);
+    
+    // Get the actual character data, not just IDs
+    const selectedCharacterData = selectedCharacters.map(id => {
+      return characters.find(char => char.id === id);
+    }).filter(Boolean); // Remove any undefined values
+    
+    console.log('Selected character data:', selectedCharacterData);
     console.log('Selected background:', selectedBackground);
     
-    navigation.navigate('Movie', { selectedCharacters, selectedBackground });
+    navigation.navigate('Movie', { 
+      selectedCharacters: selectedCharacterData, // Pass actual data
+      selectedBackground,
+      selectedAudio: route?.params?.selectedAudio // Pass through audio data
+    });
   };
 
   const handleGoBack = () => {
     navigation.goBack();
   };
+
+  const handleRetry = () => {
+    fetchCharacters();
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+            <Icon name="arrow-back" size={24} color="#6B7280" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>Select Characters</Text>
+            <Text style={styles.subtitle}>Loading characters from server...</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading characters...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+            <Icon name="arrow-back" size={24} color="#6B7280" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>Select Characters</Text>
+            <Text style={styles.subtitle}>Failed to load characters</Text>
+          </View>
+        </View>
+        <View style={styles.errorContainer}>
+          <Icon name="error-outline" size={48} color="#EF4444" />
+          <Text style={styles.errorText}>Failed to load characters</Text>
+          <Text style={styles.errorSubtext}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Empty state
+  if (characters.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+            <Icon name="arrow-back" size={24} color="#6B7280" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>Select Characters</Text>
+            <Text style={styles.subtitle}>No characters available</Text>
+          </View>
+        </View>
+        <View style={styles.emptyContainer}>
+          <Icon name="people-outline" size={48} color="#9CA3AF" />
+          <Text style={styles.emptyText}>No characters available</Text>
+          <Text style={styles.emptySubtext}>Please add characters from the admin panel</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryButtonText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const renderCharacterItem = ({ item }: { item: Character }) => {
     const isSelected = selectedCharacters.includes(item.id);
@@ -144,6 +214,10 @@ export default function CharacterSelectionScreen({ navigation }: any) {
             source={{ uri: item.preview }}
             style={styles.previewImage}
             resizeMode="cover"
+            onLoad={() => console.log('✅ Character image loaded:', item.preview)}
+            onError={(error) => {
+              console.log('❌ Character image failed:', item.preview);
+            }}
           />
           
           {isSelected && (
@@ -170,7 +244,15 @@ export default function CharacterSelectionScreen({ navigation }: any) {
               <Text style={styles.riveText}>🎭 Rive</Text>
             </View>
           )}
-          <Text style={styles.characterDescription}>{item.description}</Text>
+          <Text style={styles.characterDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+          {/* Debug info in development */}
+          {__DEV__ && (
+            <Text style={styles.debugText}>
+              ID: {item.id} | Type: {item.isRive ? 'Rive' : 'Static'}
+            </Text>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -185,13 +267,13 @@ export default function CharacterSelectionScreen({ navigation }: any) {
         <View style={styles.headerContent}>
           <Text style={styles.title}>Select Characters</Text>
           <Text style={styles.subtitle}>
-            Choose characters for your animation ({selectedCharacters.length} selected)
+            Choose characters for your animation ({selectedCharacters.length} selected from {characters.length} available)
           </Text>
         </View>
       </View>
 
       <FlatList
-        data={characterList}
+        data={characters}
         renderItem={renderCharacterItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
@@ -199,6 +281,8 @@ export default function CharacterSelectionScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
         columnWrapperStyle={styles.row}
+        refreshing={loading}
+        onRefresh={fetchCharacters}
       />
 
       <View style={styles.footer}>
@@ -224,6 +308,72 @@ export default function CharacterSelectionScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  debugText: {
+    fontSize: 8,
+    color: '#EF4444',
+    marginTop: 2,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -377,3 +527,6 @@ const styles = StyleSheet.create({
     color: '#D1D5DB',
   },
 });
+
+// Export the characterList for backward compatibility if needed elsewhere
+export const characterList: Character[] = [];

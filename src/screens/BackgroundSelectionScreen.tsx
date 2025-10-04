@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,30 +8,90 @@ import {
   SafeAreaView,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useBackgrounds } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 
 interface BackgroundItem {
-  id: string;
+  _id: string;
   name: string;
   type: string;
-  preview: string;
-  color?: string;
+  filename?: string;
+  colorData?: {
+    primary: string;
+    secondary?: string;
+    direction?: string;
+  };
+  category: string;
+  preview?: string;
 }
 
-const backgroundList: BackgroundItem[] = [
-  { id: '1', name: 'Forest Scene', type: 'Nature', preview: 'https://images.pexels.com/photos/1496373/pexels-photo-1496373.jpeg?auto=compress&cs=tinysrgb&w=400' },
-  { id: '2', name: 'City Skyline', type: 'Urban', preview: 'https://images.pexels.com/photos/466685/pexels-photo-466685.jpeg?auto=compress&cs=tinysrgb&w=400' },
-  { id: '3', name: 'Beach Paradise', type: 'Nature', preview: 'https://images.pexels.com/photos/1032650/pexels-photo-1032650.jpeg?auto=compress&cs=tinysrgb&w=400' },
-  { id: '4', name: 'Mountain View', type: 'Nature', preview: 'https://images.pexels.com/photos/1624496/pexels-photo-1624496.jpeg?auto=compress&cs=tinysrgb&w=400' },
-  { id: '5', name: 'Space Galaxy', type: 'Fantasy', preview: 'https://images.pexels.com/photos/1169754/pexels-photo-1169754.jpeg?auto=compress&cs=tinysrgb&w=400' },
-  { id: '6', name: 'Solid Blue', type: 'Color', preview: '', color: '#3B82F6' },
-  { id: '7', name: 'Solid Green', type: 'Color', preview: '', color: '#10B981' },
-  { id: '8', name: 'Solid Purple', type: 'Color', preview: '', color: '#8B5CF6' },
-];
 
-export default function BackgroundSelectionScreen({ navigation }: any) {
+export default function BackgroundSelectionScreen({ navigation, route }: any) {
   const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
+  const [backgrounds, setBackgrounds] = useState<BackgroundItem[]>([]);
+  
+  // Add error handling for auth hook
+  let user = null;
+  let logout = null;
+  
+  try {
+    const authContext = useAuth();
+    user = authContext.user;
+    logout = authContext.logout;
+  } catch (error) {
+    console.log('Auth context not available, using fallback');
+  }
+
+  const { data: backgroundsData, loading, error, refetch } = useBackgrounds();
+
+  useEffect(() => {
+    if (backgroundsData?.backgrounds) {
+      console.log('API Data received:', backgroundsData);
+      const transformedBackgrounds = backgroundsData.backgrounds.map((bg: any) => ({
+        _id: bg._id,
+        name: bg.name,
+        type: bg.type || bg.category,
+        category: bg.category,
+        filename: bg.filename,
+        colorData: bg.colorData,
+        preview: bg.type === 'image' && bg.filename 
+          ? `http://10.0.2.2:5000/uploads/backgrounds/${bg.filename}`
+          : undefined,
+      }));
+      setBackgrounds(transformedBackgrounds);
+    }
+  }, [backgroundsData, error]);
+
+  // If still loading, show loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading backgrounds from server...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // If error, show error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Icon name="error-outline" size={48} color="#EF4444" />
+          <Text style={styles.errorText}>Failed to load backgrounds</Text>
+          <Text style={styles.errorSubtext}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleBackgroundSelect = (backgroundId: string) => {
     setSelectedBackground(backgroundId);
@@ -45,37 +105,77 @@ export default function BackgroundSelectionScreen({ navigation }: any) {
     
     console.log('=== BACKGROUND SELECTION CONTINUE ===');
     console.log('Selected background ID:', selectedBackground);
-    const backgroundData = backgroundList.find(bg => bg.id === selectedBackground);
+    const backgroundData = backgrounds.find(bg => bg._id === selectedBackground);
     console.log('Background data:', backgroundData);
     
-    navigation.navigate('Characters', { selectedBackground });
+    navigation.navigate('Characters', { 
+      selectedBackground: backgroundData,
+      selectedAudio: route?.params?.selectedAudio // Pass through audio data
+    });
   };
 
   const handleGoBack = () => {
     navigation.goBack();
   };
 
+  const handleLogout = async () => {
+    if (logout) {
+      try {
+        await logout();
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
+    } else {
+      // Fallback navigation if auth is not available
+      navigation.navigate('Login');
+    }
+  };
+
   const renderBackgroundItem = ({ item }: { item: BackgroundItem }) => (
     <TouchableOpacity
       style={[
         styles.backgroundItem,
-        selectedBackground === item.id && styles.selectedBackgroundItem
+        selectedBackground === item._id && styles.selectedBackgroundItem
       ]}
-      onPress={() => handleBackgroundSelect(item.id)}
+      onPress={() => handleBackgroundSelect(item._id)}
       activeOpacity={0.7}
     >
       <View style={styles.backgroundPreview}>
-        {item.preview ? (
+        {item.type === 'image' && item.preview ? (
           <Image
-            source={{ uri: item.preview }}
+            source={{ 
+              uri: item.preview,
+              cache: 'reload', // Force reload to bypass cache issues
+            }}
             style={styles.previewImage}
             resizeMode="cover"
+            onLoad={() => console.log('✅ Image loaded successfully:', item.preview)}
+            onError={(error) => {
+              console.log('❌ Failed to load image:', item.preview);
+              console.log('Error details:', error.nativeEvent?.error);
+              // Try to fetch the image with fetch API to see the actual error
+              fetch(item.preview)
+                .then(response => console.log('Fetch response:', response.status, response.headers))
+                .catch(fetchError => console.log('Fetch error:', fetchError));
+            }}
+          />
+        ) : item.colorData ? (
+          <View 
+            style={[
+              styles.colorPreview, 
+              { backgroundColor: item.colorData.primary }
+            ]} 
           />
         ) : (
-          <View style={[styles.colorPreview, { backgroundColor: item.color }]} />
+          <View style={[styles.colorPreview, { backgroundColor: '#E5E7EB' }]}>
+            <Icon name="image" size={32} color="#9CA3AF" />
+            <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 4 }}>
+              No Preview Available
+            </Text>
+          </View>
         )}
         
-        {selectedBackground === item.id && (
+        {selectedBackground === item._id && (
           <View style={styles.selectedOverlay}>
             <Icon name="check" size={24} color="#FFFFFF" />
           </View>
@@ -84,7 +184,13 @@ export default function BackgroundSelectionScreen({ navigation }: any) {
       
       <View style={styles.backgroundInfo}>
         <Text style={styles.backgroundName}>{item.name}</Text>
-        <Text style={styles.backgroundType}>{item.type}</Text>
+        <Text style={styles.backgroundType}>{item.category}</Text>
+        {/* Debug info */}
+        {__DEV__ && (
+          <Text style={{ fontSize: 8, color: 'red' }}>
+            Type: {item.type} | File: {item.filename || 'none'} | URL: {item.preview ? 'yes' : 'no'}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -98,20 +204,29 @@ export default function BackgroundSelectionScreen({ navigation }: any) {
         <View style={styles.headerContent}>
           <Text style={styles.title}>Select Background</Text>
           <Text style={styles.subtitle}>
-            Choose a background for your animation scene
+            Choose a background for your animation scene ({backgrounds.length} available)
+            {user && ` • Welcome, ${user.name}!`}
+            {error && ' • Using offline data'}
           </Text>
         </View>
+        {user && (
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Icon name="logout" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
-        data={backgroundList}
+        data={backgrounds}
         renderItem={renderBackgroundItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item._id}
         numColumns={2}
         style={styles.backgroundList}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
         columnWrapperStyle={styles.row}
+        refreshing={loading}
+        onRefresh={refetch}
       />
 
       <View style={styles.footer}>
@@ -137,6 +252,48 @@ export default function BackgroundSelectionScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -200,6 +357,8 @@ const styles = StyleSheet.create({
   backgroundPreview: {
     height: 120,
     position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   previewImage: {
     width: '100%',
@@ -208,6 +367,8 @@ const styles = StyleSheet.create({
   colorPreview: {
     width: '100%',
     height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   selectedOverlay: {
     position: 'absolute',
@@ -254,5 +415,14 @@ const styles = StyleSheet.create({
   },
   disabledButtonText: {
     color: '#D1D5DB',
+  },
+  logoutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
 });

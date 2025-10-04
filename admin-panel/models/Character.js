@@ -24,7 +24,13 @@ const characterSchema = new mongoose.Schema({
   },
   animations: [{
     name: String,
-    description: String
+    description: String,
+    previewImage: {
+      filename: String,
+      originalName: String,
+      fileSize: Number,
+      mimeType: String
+    }
   }],
   stateMachines: [{
     name: String,

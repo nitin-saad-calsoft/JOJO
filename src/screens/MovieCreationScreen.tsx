@@ -19,6 +19,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Audio from '../components/Audio';
 import RiveCharacter from '../components/RiveCharacter';
+import Rive from 'rive-react-native';
 
 
 
@@ -37,7 +38,8 @@ interface Character {
   isRive?: boolean;
   riveFile?: string;
   animations?: string[];
-  stateMachine?:string
+  stateMachine?:string;
+  animationPreviews?: { animationName: string; filename: string; mimeType?: string }[];
 }
 
 interface Keyframe {
@@ -65,36 +67,6 @@ const animationActions: AnimationAction[] = [
   { id: 'dance', name: 'Dance', icon: '💃' },
 ];
 
-const availableCharacters = [
-  { 
-    id: '1', 
-    name: 'rive Knight', 
-    preview: 'https://images.pexels.com/photos/1670977/pexels-photo-1670977.jpeg?auto=compress&cs=tinysrgb&w=400',
-    isRive: true,
-    riveFile: 'fifth',
-    animations: ['idle', 'walk', 'run', 'attack', 'jump'],
-    stateMachine:'talk-state-machine'
-  },
-  { 
-    id: '2', 
-    name: 'six', 
-    preview: 'https://images.pexels.com/photos/1670977/pexels-photo-1670977.jpeg?auto=compress&cs=tinysrgb&w=400',
-    isRive: true,
-    riveFile: 'six',
-    animations: ['idle', 'cast_spell', 'walk', 'teleport'],
-    stateMachine:'talk-state-machine'
-  },
-  { 
-    id: '3', 
-    name: 'rive Assistant', 
-    preview: 'https://images.pexels.com/photos/2085831/pexels-photo-2085831.jpeg?auto=compress&cs=tinysrgb&w=400',
-    isRive: true,
-    riveFile: 'fifth',
-    animations: ['idle', 'walk', 'work', 'dance', 'malfunction'],
-    stateMachine:'talk-state-machine'
-  },
-];
-
 const availableBackgrounds = [
   { id: '1', name: 'Forest Scene', type: 'Nature', preview: 'https://images.pexels.com/photos/1496373/pexels-photo-1496373.jpeg?auto=compress&cs=tinysrgb&w=400' },
   { id: '2', name: 'City Skyline', type: 'Urban', preview: 'https://images.pexels.com/photos/466685/pexels-photo-466685.jpeg?auto=compress&cs=tinysrgb&w=400' },
@@ -108,8 +80,9 @@ const availableBackgrounds = [
 
 export default function MovieCreationScreen({ navigation, route }: any) {
   const [characters, setCharacters] = useState<Character[]>([]);
-  const [selectedCharacter, setSelectedCharacter] = useState<string | null>('1');
+  const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
   const [selectedBackground, setSelectedBackground] = useState<any>(null);
+  const [selectedAudio, setSelectedAudio] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showCharacterModal, setShowCharacterModal] = useState(false);
   const [showPropertiesModal, setShowPropertiesModal] = useState(false);
@@ -120,7 +93,6 @@ export default function MovieCreationScreen({ navigation, route }: any) {
   const [selectedChunkId, setSelectedChunkId] = useState<string | null>(null);
   const [unassignTrigger, setUnassignTrigger] = useState<{ characterId: string } | null>(null);
   const [assignChunkToCharacter, setAssignChunkToCharacter] = useState<{ chunkId: string, characterId: string | null, ts: number } | null>(null);
-
   const [keyframes, setKeyframes] = useState<Keyframe[]>([
     {
       id: 'keyframe_0',
@@ -130,33 +102,91 @@ export default function MovieCreationScreen({ navigation, route }: any) {
   ]);
   const [currentKeyframeIndex, setCurrentKeyframeIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [allCharacters, setAllCharacters] = useState<Character[]>([]);
 
-  // Load selected characters from navigation params
+  const fetchCharacters = async () => {
+      // setLoading(true);
+      // setError(null);
+      try {
+        const response = await fetch('http://10.0.2.2:5000/api/characters');
+        const data = await response.json();
+        console.log('API Characters loaded:', data);
+        
+        // Transform API characters to match our interface
+        // Update the preview URL logic to support SVG and JPEG images
+        const transformedCharacters = (data.characters || []).map((char: any) => {
+          let previewUrl = 'https://images.pexels.com/photos/163036/mario-luigi-yoschi-figures-163036.jpeg?auto=compress&cs=tinysrgb&w=400';
+          if (char.previewImage?.filename) {
+            // Support SVG and JPEG images
+            const mimeType = char.previewImage?.mimeType || '';
+            if (mimeType === 'image/svg+xml') {
+              previewUrl = `http://10.0.2.2:5000/uploads/characters/${char.previewImage.filename}`;
+            } else if (mimeType === 'image/jpeg' || mimeType === 'image/png') {
+              previewUrl = `http://10.0.2.2:5000/uploads/characters/${char.previewImage.filename}`;
+            }
+          }
+  
+          return {
+            id: char._id,
+            name: char.name,
+            type: char.category || 'Unknown',
+            preview: previewUrl,
+            description: char.description || 'No description available',
+            isRive: char.type === 'rive',
+            riveFile: char.riveFile?.filename?.replace('.riv', '') || null,
+            animations: char.animations?.map((a: any) => a.name) || ['idle', 'walk', 'talk'],
+            category: char.category,
+            animationPreviews: char.animations?.map((a: any) => ({
+              animationName: a.name,
+              filename: a.previewImage?.filename,
+              mimeType: a.previewImage?.mimeType,
+            })) || [],
+          };
+        });
+  
+        setAllCharacters(transformedCharacters);
+      } catch (error) {
+        console.error('Failed to load characters from API:', error);
+        // setError('Failed to load characters from server');
+      } finally {
+        // setLoading(false);
+      }
+    };
+  
+    console.log("*(*(*(*(*", characters)
+  
+    useEffect(() => {
+      fetchCharacters();
+    }, []);
+  // Load selected data from navigation params - UPDATED
   React.useEffect(() => {
-   
-    // Try both route.params and navigation state
-    const selectedCharacterIds = route?.params?.selectedCharacters || 
-      navigation.getState()?.routes?.find(r => r.name === 'Movie')?.params?.selectedCharacters || [];
-    const selectedBackgroundId = route?.params?.selectedBackground || 
-      navigation.getState()?.routes?.find(r => r.name === 'Movie')?.params?.selectedBackground;
+    console.log('=== MOVIE CREATION PARAMS ===');
+    console.log('Route params:', route?.params);
     
-    if (selectedCharacterIds.length > 0) {
-      const newCharacters = selectedCharacterIds.map((id: string, index: number) => {
-        const characterData = availableCharacters.find(c => c.id === id);
-        return {
-          id: characterData?.id,
-          name: characterData?.name || `Character ${index + 1}`,
-          x: 50 + (index * 80),
-          y: 100 + (index * 60),
-          scale: 1,
-          rotation: 0,
-          animation: 'idle' as const,
-          preview: characterData?.preview || 'https://images.pexels.com/photos/163036/mario-luigi-yoschi-figures-163036.jpeg?auto=compress&cs=tinysrgb&w=400',
-          isRive: characterData?.isRive || false,
-          riveFile: characterData?.riveFile,
-          animations: characterData?.animations || ['idle', 'walk', 'run', 'talk']
-        };
-      });
+    const selectedCharacterData = route?.params?.selectedCharacters || [];
+    const selectedBackgroundData = route?.params?.selectedBackground;
+    const selectedAudioData = route?.params?.selectedAudio;
+    
+    console.log('Selected characters data:', selectedCharacterData);
+    console.log('Selected background:', selectedBackgroundData);
+    console.log('Selected audio:', selectedAudioData);
+    
+    // Load characters from the actual character data (not just IDs)
+    if (selectedCharacterData.length > 0) {
+      const newCharacters = selectedCharacterData.map((characterData: any, index: number) => ({
+        id: characterData.id || characterData._id,
+        name: characterData.name,
+        x: 50 + (index * 80),
+        y: 100 + (index * 60),
+        scale: 1,
+        rotation: 0,
+        animation: 'idle' as const,
+        preview: characterData.preview,
+        isRive: characterData.isRive || false,
+        riveFile: characterData.riveFile || null,
+        animations: characterData.animations || ['idle', 'walk', 'run', 'talk'],
+        stateMachine: characterData.stateMachine || null,
+      }));
       
       setCharacters(newCharacters);
       setSelectedCharacter(newCharacters[0]?.id || null);
@@ -170,18 +200,22 @@ export default function MovieCreationScreen({ navigation, route }: any) {
     }
     
     // Load selected background
-    if (selectedBackgroundId) {
-      const backgroundData = availableBackgrounds.find(bg => bg.id === selectedBackgroundId);
-      if (backgroundData) {
-        setSelectedBackground(backgroundData);
-      }
+    if (selectedBackgroundData) {
+      console.log('Loading background:', selectedBackgroundData);
+      setSelectedBackground(selectedBackgroundData);
     } else {
-      // Set a default background for testing
+      // Set a default background if none selected
       const defaultBackground = availableBackgrounds[0];
       setSelectedBackground(defaultBackground);
     }
-  }, [route?.params, navigation]);
-
+    
+    // Store selected audio data
+    if (selectedAudioData) {
+      console.log('Audio data available:', selectedAudioData);
+      setSelectedAudio(selectedAudioData);
+    }
+    
+  }, [route?.params]);
 
   useEffect(() => {
   if (characters.length === 0) return;
@@ -393,21 +427,8 @@ export default function MovieCreationScreen({ navigation, route }: any) {
     }
   };
 
-const handleChunkActive = useCallback((characterId: any) => {
-  setActiveMicCharacterId(characterId);
-
-  setCharacters((prevCharacters:any) => {
-    const updated = prevCharacters.map((char) => ({
-      ...char,
-      animation: char.id === characterId ? "talk" : "walk",
-    }));
-
-    // ✅ sync with keyframe using updated characters
-    updateCurrentKeyframe(updated);
-
-    return updated;
-  });
-}, [updateCurrentKeyframe]);
+  // Update handleChunkActive to set animation to "talk" for the assigned character during playback
+  
 
 
   const updateCurrentKeyframe = (updatedCharacters?: Character[]) => {
@@ -424,6 +445,24 @@ const handleChunkActive = useCallback((characterId: any) => {
       return updated;
     });
   };
+
+  const handleChunkActive = useCallback((characterId: any) => {
+    setActiveMicCharacterId(characterId);
+
+    setCharacters((prevCharacters: any) => {
+      // If playback is active, set "talk" animation for the assigned character, "walk" for others
+      if (isPlaying && characterId) {
+        const updated = prevCharacters.map((char: any) => ({
+          ...char,
+          animation: char.id === characterId ? "talk" : "walk",
+        }));
+        updateCurrentKeyframe(updated);
+        return updated;
+      }
+      // If not playing, keep current animations
+      return prevCharacters;
+    });
+  }, [updateCurrentKeyframe, isPlaying]);
 
   const deleteKeyframe = (index: number) => {
     if (keyframes.length <= 1) {
@@ -572,12 +611,34 @@ const setUnassignChunksFromCharacter = (characterId: string) => {
 };
 
 
+// Add this helper to fetch full character data by id
+const fetchCharacterById = async (id: string) => {
+  try {
+    const response = await fetch(`http://10.0.2.2:5000/api/characters/full/${id}`);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    return null;
+  }
+};
+
+// Add this state to store the full character data
+const [fullCharacter, setFullCharacter] = useState<any>(null);
+
+useEffect(() => {
+  if (showPropertiesModal && selectedChar?.id) {
+    fetchCharacterById(selectedChar.id).then(data => {
+      console.log('Fetched full character data:********', data);
+      setFullCharacter(data);
+    });
+  }
+}, [showPropertiesModal, selectedChar?.id]);
+
 // Add this function before your return statement
 const handleSelectedChunkCharacterId = useCallback((characterId: string | null) => {
   setMicStates((prev) => {
     let changed = false;
     const updated: { [id: string]: boolean } = {};
-    // Use a stable reference for characters
     for (const char of characters) {
       const shouldBeActive = char.id === characterId;
       updated[char.id] = shouldBeActive;
@@ -586,8 +647,42 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
     return changed ? updated : prev;
   });
   setActiveMicCharacterId(characterId || null);
-}, [characters]); // <--- use characters directly, not JSON.stringify(characters)
+}, [characters]);
 
+// Add this function before your return statement
+const handleCharacterModalSelect = (characterId: string) => {
+  const isSelected = !!characters.find(c => c.id === characterId);
+  if (isSelected) {
+    // Unselect: remove from characters
+    const updated = characters.filter(c => c.id !== characterId);
+    setCharacters(updated);
+    updateCurrentKeyframe(updated);
+    if (selectedCharacter === characterId) setSelectedCharacter(null);
+  } else {
+    // Add: find character data from characters and add
+    const charData = allCharacters.find(c => c.id === characterId);
+    if (charData) {
+      const newChar: Character = {
+        id: charData.id,
+        name: charData.name,
+        x: Math.random() * 200 + 50,
+        y: Math.random() * 200 + 100,
+        scale: 1,
+        rotation: 0,
+        animation: 'idle',
+        preview: charData.preview,
+        isRive: charData.isRive || false,
+        riveFile: charData.riveFile || null,
+        animations: charData.animations || ['idle'],
+        stateMachine: charData.stateMachine || null,
+      };
+      const updated = [...characters, newChar];
+      setCharacters(updated);
+      updateCurrentKeyframe(updated);
+      setSelectedCharacter(newChar.id);
+    }
+  }
+};
 
   const renderCharacterItem = ({ item }: { item: any }) => (
     <TouchableOpacity
@@ -597,10 +692,21 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
     >
       <Image source={{ uri: item.preview }} style={styles.characterModalImage} />
       <Text style={styles.characterModalName}>{item.name}</Text>
+      <Text style={styles.characterModalType}>
+        {item.isRive ? '🎭 Rive' : '🖼️ Static'} • {item.category}
+      </Text>
+      {item.description && (
+        <Text style={styles.characterModalDescription} numberOfLines={2}>
+          {item.description}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 
-  const selectedChar = characters.find(char => char.id === selectedCharacter);
+  // Fix: Always check selectedChar before accessing its properties
+  console.log("selectedChar&*&*&*&*&*",  fullCharacter)
+  const selectedChar = characters?.find(char => char.id === selectedCharacter);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -688,6 +794,7 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
             </View>
           )}
           
+          {console.log("************characters", characters, characters[0]?.riveFile)}
           {/* Characters Layer */}
           {characters.map((character) => {
             const panResponder = createPanResponder(character.id);
@@ -764,10 +871,16 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                 </View>
 
                 {character.isRive && character.riveFile ? (
+//                   <Rive
+//   url="http://10.0.2.2:5000/uploads/characters/dcbedafaf48d4670b69c35275d77b704"
+//   stateMachineName="talk-state-machine"
+//   style={{ width: 400, height: 100 }}
+// />
                   <RiveCharacter
-                    riveFile={character.riveFile}
+                    // riveFile={character.riveFile}
+                    url={`http://10.0.2.2:5000/uploads/characters/${character.riveFile}`}
                     animationName={character.animation}
-                    stateMachineName={character.stateMachine}
+                    stateMachineName={character.stateMachine || undefined}
                     width={60}
                     height={60}
                     scale={1}
@@ -816,6 +929,14 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
       <View style={styles.compactControlPanel}>
         {/* Quick Controls */}
         <View style={styles.quickControls}>
+          {/* Always show Add Character button */}
+          <TouchableOpacity 
+            style={styles.addCharacterButton}
+            onPress={() => setShowCharacterModal(true)}
+          >
+            <Icon name="person-add" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+
           {selectedChar ? (
             <>
               <TouchableOpacity 
@@ -831,26 +952,15 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                 <Icon name="settings" size={16} color="#FFFFFF" />
                 <Text style={styles.quickButtonText}>Props</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.addCharacterButton}
-                onPress={() => setShowCharacterModal(true)}
-              >
-                <Icon name="person-add" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-              
               <TouchableOpacity style={styles.quickButton} onPress={rotateCharacter}>
                 <Icon name="rotate-right" size={16} color="#FFFFFF" />
               </TouchableOpacity>
-              
               <TouchableOpacity style={styles.quickButton} onPress={() => scaleCharacter(true)}>
                 <Icon name="add" size={16} color="#FFFFFF" />
               </TouchableOpacity>
-              
               <TouchableOpacity style={styles.quickButton} onPress={() => scaleCharacter(false)}>
                 <Icon name="remove" size={16} color="#FFFFFF" />
               </TouchableOpacity>
-              
               <TouchableOpacity 
                 style={[styles.quickButton, styles.deleteButton]} 
                 onPress={deleteCharacter}
@@ -861,13 +971,13 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
           ) : (
             <Text style={styles.noSelectionText}>Tap a character to select</Text>
           )}
-          
-          <TouchableOpacity 
+
+          {/* <TouchableOpacity 
             style={[styles.playButton, isPlaying && styles.pauseButton]}
             onPress={() => setIsPlaying(!isPlaying)}
           >
             <Icon name={isPlaying ? "pause" : "play-arrow"} size={20} color="#FFFFFF" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
  
@@ -878,22 +988,22 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
           addKeyframe={addKeyframe}
           goToKeyframe={goToKeyframe}
           activeMicCharacterId={activeMicCharacterId}
-          // activeMicCharacterId={Object.keys(micStates).find(id => micStates[id]) || null}
           onPlayChange={onPlayChange}
           onTimeUpdate={onTimeUpdate}
           keyframes={keyframes} 
           currentKeyframeIndex={currentKeyframeIndex}
-          selectedCharacter={selectedCharacter}   // 👈 pass it here
+          selectedCharacter={selectedCharacter}
           characters={characters}  
           defaultCharacterId={characters[0]?.name}
+          selectedAudio={selectedAudio} // Pass selected audio data
           onMicAssign={(characterId:any) => {
-          setActiveMicCharacterId(characterId);
-        }}
-        onChunkSelect={setSelectedChunkId}
-        onChunkActive={handleChunkActive}
-        onSelectedChunkCharacterId={handleSelectedChunkCharacterId}
-        unassignTrigger={unassignTrigger}
-        assignChunkToCharacter={assignChunkToCharacter}
+            setActiveMicCharacterId(characterId);
+          }}
+          onChunkSelect={setSelectedChunkId}
+          onChunkActive={handleChunkActive}
+          onSelectedChunkCharacterId={handleSelectedChunkCharacterId}
+          unassignTrigger={unassignTrigger}
+          assignChunkToCharacter={assignChunkToCharacter}
         />
       </View>
       {/* Character Properties Modal */}
@@ -914,8 +1024,7 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                 <Icon name="close" size={20} color="#6B7280" />
               </TouchableOpacity>
             </View>
-            
-            {selectedChar && (
+            {selectedChar ? (
               <ScrollView contentContainerStyle={styles.propertiesScrollContent}>
                 <View style={styles.propertiesContent}>
                   <Text style={styles.propertyTitle}>{selectedChar.name}</Text>
@@ -930,30 +1039,43 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                   <View style={styles.propertySection}>
                     <Text style={styles.sectionTitle}>Animation</Text>
                     <View style={styles.animationGrid}>
-                      {animationActions
-                        // .filter(action => 
-                        //   !selectedChar.isRive || 
-                        //   !selectedChar.animations || 
-                        //   selectedChar.animations.includes(action.id)
-                        // )
-                        .map((action) => (
-                        <TouchableOpacity
-                          key={action.id}
-                          style={[
-                            styles.animationGridButton,
-                            selectedChar.animation === action.id && styles.activeAnimationGridButton
-                          ]}
-                          onPress={() => setCharacterAnimation(action.id as any)}
-                        >
-                          <Text style={styles.animationGridIcon}>{action.icon}</Text>
-                          <Text style={[
-                            styles.animationGridLabel,
-                            selectedChar.animation === action.id && styles.activeAnimationGridLabel
-                          ]}>
-                            {action.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                      {fullCharacter?.animations?.map((anim, idx) => {
+                        const isActive = selectedChar.animation === anim.name;
+                        const actionObj = animationActions.find(a => a.id === anim.name);
+                        return (
+                          <TouchableOpacity
+                            key={anim.name || idx}
+                            style={[
+                              styles.animationGridButton,
+                              isActive && styles.activeAnimationGridButton
+                            ]}
+                            onPress={() => {
+                              setCharacterAnimation(anim.name);
+                              // Optionally, you can trigger playback or state machine change here if needed
+                            }}
+                          >
+                            {anim.previewImage?.filename ? (
+                              <Image
+                                source={{
+                                  uri: `http://10.0.2.2:5000/uploads/characters/${anim.previewImage.filename}`
+                                }}
+                                style={{ width: 60, height: 60, borderRadius: 8, marginTop: 6 }}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>
+                                No preview image
+                              </Text>
+                            )}
+                            <Text style={[
+                              styles.animationGridLabel,
+                              isActive && styles.activeAnimationGridLabel
+                            ]}>
+                              {actionObj?.name || anim.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   </View>
                   
@@ -984,8 +1106,36 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                       </TouchableOpacity>
                     </View>
                   </View>
+        
+                  {/* <View style={styles.propertySection}>
+                    <Text style={styles.sectionTitle}>Animations</Text>
+                    {fullCharacter?.animations?.map((anim: any, idx: number) => (
+                      <View key={anim.name} style={{ marginBottom: 12 }}>
+                        <Text style={{ fontWeight: 'bold', fontSize: 13 }}>{anim.name}</Text>
+                        {anim.previewImage?.filename ? (
+                          <Image
+                            source={{
+                              uri: `http://10.0.2.2:5000/uploads/characters/${anim.previewImage.filename}`
+                            }}
+                            style={{ width: 80, height: 80, borderRadius: 8, marginTop: 6 }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>
+                            No preview image
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View> */}
                 </View>
               </ScrollView>
+            ) : (
+              <View style={{ padding: 24 }}>
+                <Text style={{ color: '#EF4444', fontSize: 16 }}>
+                  No character selected.
+                </Text>
+              </View>
             )}
           </View>
         </View>
@@ -1053,9 +1203,8 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                   <Text style={styles.exportOptionSize}>
                     Size: {getExportPreview().estimatedFileSize.json}
                   </Text>
-                </View>
-                <Icon name="chevron-right" size={20} color="#9CA3AF" />
-              </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
               
               <TouchableOpacity
                 style={[styles.exportOption, isExporting && styles.disabledExportOption]}
@@ -1073,9 +1222,8 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                   <Text style={styles.exportOptionSize}>
                     Size: {getExportPreview().estimatedFileSize.video}
                   </Text>
-                </View>
-                <Icon name="chevron-right" size={20} color="#9CA3AF" />
-              </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
               
               <TouchableOpacity
                 style={[styles.exportOption, isExporting && styles.disabledExportOption]}
@@ -1120,7 +1268,7 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Character jjjj</Text>
+              <Text style={styles.modalTitle}>Add / Remove Characters</Text>
               <TouchableOpacity 
                 style={styles.modalCloseButton}
                 onPress={() => setShowCharacterModal(false)}
@@ -1128,19 +1276,53 @@ const handleSelectedChunkCharacterId = useCallback((characterId: string | null) 
                 <Icon name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
-            
             <FlatList
-              data={availableCharacters}
-              renderItem={renderCharacterItem}
+              data={allCharacters} // Show all characters from API
+              renderItem={({ item }) => {
+                // Tick if character is already selected (exists in characters state)
+                const isSelected = !!characters.find(c => c.id === item.id);
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.characterModalItem,
+                      isSelected && styles.selectedCharacterItem
+                    ]}
+                    onPress={() => handleCharacterModalSelect(item.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Image source={{ uri: item.preview }} style={styles.characterModalImage} />
+                    <Text style={styles.characterModalName}>{item.name}</Text>
+                    <Text style={styles.characterModalType}>
+                      {item.isRive ? '🎭 Rive' : '🖼️ Static'} • {item.category}
+                    </Text>
+                    {item.description && (
+                      <Text style={styles.characterModalDescription} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                    )}
+                    {isSelected && (
+                      <View style={styles.selectedOverlay}>
+                        <Icon name="check" size={20} color="#3B82F6" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
               keyExtractor={(item) => item.id}
               numColumns={2}
               contentContainerStyle={styles.modalList}
             />
+            <View style={styles.infoContainer}>
+              <Text style={styles.infoText}>
+                Tap to select/unselect characters. Selected characters will appear in your movie.
+              </Text>
+            </View>
           </View>
         </View>
       </Modal>
     </SafeAreaView>
   );
+  
 }
 
 const styles = StyleSheet.create({
@@ -1308,6 +1490,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 14,
+    height: 36,
     gap: 6,
   },
   quickButton: {
@@ -1514,6 +1697,19 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     textAlign: 'center',
   },
+  characterModalType: {
+    fontSize: 11,
+    color: '#8B5CF6',
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  characterModalDescription: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 4,
+    textAlign: 'center',
+    lineHeight: 12,
+  },
   exportModalContent: {
     width: '97%',
     maxHeight: '87%',
@@ -1648,5 +1844,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#6366F1',
     borderRadius: 2,
   },
+  infoContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  goBackToSelectionButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  goBackToSelectionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
-

@@ -15,8 +15,9 @@ const audioSchema = new mongoose.Schema({
     required: true
   },
   duration: {
-    type: Number, // in seconds
-    required: true
+    type: String, // <-- Change from Number to String
+    default: '0:00',
+    required: true,
   },
   fileSize: {
     type: Number, // in bytes
