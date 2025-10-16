@@ -9,6 +9,7 @@ import AudioSelectionScreen from './src/screens/AudioSelectionScreen';
 import BackgroundSelectionScreen from './src/screens/BackgroundSelectionScreen';
 import CharacterSelectionScreen from './src/screens/CharacterSelectionScreen';
 import MovieCreationScreen from './src/screens/MovieCreationScreen';
+import VideoGalleryScreen from './src/screens/VideoGalleryScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -36,6 +37,7 @@ function AppNavigator() {
         <Stack.Screen name="Background" component={BackgroundSelectionScreen} />
         <Stack.Screen name="Characters" component={CharacterSelectionScreen} />
         <Stack.Screen name="Movie" component={MovieCreationScreen} />
+        <Stack.Screen name="VideoGallery" component={VideoGalleryScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

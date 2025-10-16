@@ -78,3 +78,34 @@ export function useAudioFile(id: string) {
     [id]
   );
 }
+
+export const useVideos = () => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchVideos = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch('http://10.0.2.2:5000/api/videos');
+      const result = await response.json();
+      setData(result);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch videos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVideos();
+  }, []);
+
+  return {
+    data,
+    loading,
+    error,
+    refetch: fetchVideos,
+  };
+};
